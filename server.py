@@ -1,8 +1,8 @@
 import socket
-import os
 import base64
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
+#from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding 
+from cryptography.hazmat.primitives import hashes, serialization
 
 # Configurações do servidor
 HOST = '127.0.0.1'  # Aceita conexões de qualquer IP
@@ -22,50 +22,71 @@ print(f"Servidor escutando em {HOST}:{PORT}")
 conn, addr = server_socket.accept()
 print(f"Conectado por {addr}")
 
-def encrypt_message(message, key):
-    iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-    ct = encryptor.update(message.encode()) + encryptor.finalize()
-    return base64.b64encode(iv + ct).decode()
+# Gerar par de chaves RSA
+private_key = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048,
+)
+public_key = private_key.public_key()
 
-def decrypt_message(token, key):
-    data = base64.b64decode(token)
-    iv = data[:16]
-    ct = data[16:]
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    return (decryptor.update(ct) + decryptor.finalize()).decode()
+def encrypt_message(message, public_key):
+    ciphertext = public_key.encrypt(
+        message.encode(),
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return base64.b64encode(ciphertext).decode()
 
-def generate_aes_key():
-    return os.urandom(32)  # 256 bits
+def decrypt_message(token, private_key):
+    ciphertext = base64.b64decode(token)
+    plaintext = private_key.decrypt(
+        ciphertext,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return plaintext.decode()
 
 # Função para salvar chave em arquivo
-def save_key(key, filename):
-    with open(filename, "wb") as f:
-        f.write(key)
+#def save_key(key, filename):
+#    with open(filename, "wb") as f:
+#        f.write(key)
 
 # Função para carregar chave de arquivo
-def load_key(filename):
-    with open(filename, "rb") as f:
-        return f.read()
+#def load_key(filename):
+#    with open(filename, "rb") as f:
+#        return f.read()
 
-# Geração e salvamento das chaves
-private_key = generate_aes_key()
-public_key = generate_aes_key()  # AES não tem chave pública, mas para fins de demonstração
+#save_key(private_key, "aes_private.key")
+#save_key(public_key, "aes_public.key")
 
-save_key(private_key, "aes_private.key")
-save_key(public_key, "aes_public.key")
+# Serializar a chave pública para bytes (formato PEM)
+public_key_bytes = public_key.public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo
+)
 
-conn.sendall(public_key)
+# Envie public_key_bytes pelo socket
+conn.sendall(public_key_bytes)
 public_other_key = conn.recv(1024)
+
+# Adicione esta linha para garantir que a chave está correta:
+public_other_key = serialization.load_pem_public_key(public_other_key)
 
 try:
     while True:
         data = conn.recv(1024)  # Recebe até 1024 bytes
         if not data:
             break
-        print(f"Mensagem recebida: {decrypt_message(data.decode(), private_key)}")
+        # Corrigido: só decodifique se for mensagem (base64)
+        mensagem = decrypt_message(data.decode(), private_key)
+        #print(f"Mensagem criptografada: {data.decode()}")
+        print(f"Mensagem recebida: {mensagem}")
         
         resposta = input("Digite sua resposta: ")
         conn.sendall(encrypt_message(resposta, public_other_key).encode())
