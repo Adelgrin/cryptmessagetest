@@ -7,19 +7,19 @@ from cryptography.hazmat.primitives import hashes, serialization
 HOST = '127.0.0.1'  # Exemplo: '192.168.1.10'
 PORT = 5000
 
-# Cria o socket
+#NOTE: Cria o socket
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# Conecta ao servidor
+#NOTE: Conecta ao servidor
 client_socket.connect((HOST, PORT))
 print(f"Conectado ao servidor em {HOST}:{PORT}")
 
+#NOTE: Gera par de chaves
 private_key = rsa.generate_private_key(
     public_exponent=65537,
     key_size=2048,
 )
 public_key = private_key.public_key()
-
 
 
 def encrypt_message(message, public_key):
@@ -45,6 +45,7 @@ def decrypt_message(token, private_key):
     )
     return plaintext.decode()
 
+#NOTE: antigamente salvava as chaves em arquivo para ultilizacao recorrente
 
 # Função para salvar chave em arquivo
 #def save_key(key, filename):
